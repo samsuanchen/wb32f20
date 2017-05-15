@@ -1,37 +1,46 @@
-# wb32f10 -- Wifi Boy ESP32 Forth proj 010
+# wb32f20 -- Wifi Boy ESP32 Forth proj 020
 
 ## Simple Wifi Boy ESP32 System Having 21 Forth Primitive Words
 
-### A. Getting start of wb32f10
+### A. Getting start of wb32f20
 
-#### a. Before Uploading wb32f10
+#### a. Before Uploading wb32f20
 
-1.Connect **wb32** (Wifi Boy ESP32) to USB COM port.
+	01. Connect **wb32** (Wifi Boy ESP32) to USB COM port.
+
 <img src="jpg/00.jpg" width=80%>
 
-2.Double lick **wb32f10.ino** in the wb32f10 project directory.
+	02. Double lick **wb32f20.ino** in the wb32f20 project directory.
 
 <img src="jpg/01.jpg" width=80%>
 
-3.The **source** code of wb32f10.ino will be shown.
+	03. The **source** code of wb32f20.ino will be shown.
 
 <img src="jpg/02.jpg" width=80%>
 
-4.Then we could open the **Serial Monitor** by selecting the submenu.
+	04. Select Board "ESP32 Dev Module" for  **wb32** (Wifi Boy ESP32)
+
+<img src="jpg/02_0.jpg" width=80%>
+
+	05. Select appropriate COM Port.
+
+<img src="jpg/02_1.jpg" width=80%>
+
+	06. Then we could open the **Serial Monitor** by selecting the submenu.
 
 <img src="jpg/03.jpg" width=80%>
 
-5.The **empty** Serial Monitor is opened.
+	07. The **empty** Serial Monitor is opened.
 
 <img src="jpg/04.jpg" width=80%>
 
-#### b. Uploading wb32f10
+#### b. Uploading wb32f20
 
-6.Then we could click the arrow to **upload** and start the code.
+Then we could click the arrow to **upload** and start the code.
 
 <img src="jpg/05.jpg" width=80%>
 
-Once wb32f10 started, the **blue led** on the back side of wifi boy esp32 will be turned on. We could turn off the led by pressing the right blue button on the front side of wb32.
+Once wb32f20 started, the **blue led** on the back side of wifi boy esp32 will be turned on. We could turn off the led by pressing the right blue button on the front side of wb32.
 
 <img src="jpg/06.jpg" width=80%>
 
@@ -65,7 +74,7 @@ And the following **message** will be shown on the Serial Monitor.
 
 <img src="jpg/07.jpg" width=80%>
 
-#### c. Testing wb32f10
+#### c. Testing wb32f20
 Once we have numbers on the data stack (shown in bracket), we could try the forth word **bin** to change the conversion base from 10 to 2.
 
 	01. bin ( -- ) set number conversion base B=2
@@ -197,7 +206,7 @@ Normally, the forth word **out** is used to set gpio pin mode direction as OUTPU
 
 Alternatively, we could use "1 16 p!" to turn off or "0 16 p!" to turn on the blue led. 
 
-#### d. Vocaburaly of wb32f10
+#### d. Vocaburaly of wb32f20
 
     ws01 == wordset 01 == base setting of number conversion
     01. bin            ( -- )          set number conversion base B=2
@@ -227,7 +236,7 @@ Alternatively, we could use "1 16 p!" to turn off or "0 16 p!" to turn on the bl
     20. inp            ( pin -- )      set gpio pin mode direction as INPUT
     21. p@             ( pin -- v )    read v from digital INPUT pin (v=0 for LOW or v=1 for HIGH)
 
-### B. Intention of project wb32f10
+### B. Intention of project wb32f20
 
 01. Forth Promotion
 
@@ -245,7 +254,7 @@ Alternatively, we could use "1 16 p!" to turn off or "0 16 p!" to turn on the bl
 
 07. Less System Programming
 
-### C. Implementation of project wb32f10
+### C. Implementation of project wb32f20
 
 #### a. system structure
 
@@ -281,7 +290,7 @@ Alternatively, we could use "1 16 p!" to turn off or "0 16 p!" to turn on the bl
 
 03. V.dump(), show memory cells
 
-### D. Extention of project wb32f10
+### D. Extention of project wb32f20
 
 01. add new forth word to vocabulary
 
