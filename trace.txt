@@ -1,0 +1,46 @@
+interpret(": w 250 ms ; : x led low w led high w ; x") traced step by step
+
+ip=0
+exec w 3ffc8ecc w->name "x" w->type "colon"
+call w 3ffc8ecc w->name "x" w->wpl  3ffc8eec
+. rsPush(ip), ip=w->wpl 3ffc8eec
+. ip=3ffc8eec w=*ip++ 3f4013a8
+. exec w 3f4013a8 w->name "led" w->type "primitive"
+. w->code() 
+. ip=3ffc8ef0 w=*ip++ 3f401360
+. exec w 3f401360 w->name "low" w->type "primitive"
+. w->code()
+. ip=3ffc8ef4 w=*ip++ 3ffc8e94
+. exec w 3ffc8e94 w->name "w" w->type "colon"
+. call w 3ffc8e94 w->name "w" w->wpl  3ffc8eb4
+. . rsPush(ip), ip=w->wpl 3ffc8eb4
+. . ip=3ffc8eb4 w=*ip++ 3f4012b8
+. . exec w 3f4012b8 w->name "(lit)" w->type "primitive"
+. . w->code()   x=*ip++ 000000fa 250
+. . ip=3ffc8ebc w=*ip++ 3f401330
+. . exec w 3f401330 w->name "ms" w->type "primitive"
+. . ip=3ffc8ec0 w=*ip++ 3f4012d0
+. . exec w 3f4012d0 w->name "(;)" w->type "primitive"
+. . w->code()   ip=rsPop()
+. ip=3ffc8ef8 w=*ip++ 3f4013a8
+. exec w 3f4013a8 w->name "led" w->type "primitive"
+. w->code() 
+. ip=3ffc8efc w=*ip++ 3f401378
+. exec w 3f401378 "high" w->type "primitive"
+. w->code()
+. ip=3ffc8f00 w=*ip++ 3ffc8e94
+. exec w 3ffc8e94 w->name "w" w->type "colon"
+. call w 3ffc8e94 w->name "w" w->wpl  3ffc8eb4
+. . rsPush(ip), ip=w->wpl 3ffc8eb4
+. . ip=3ffc8eb4 w=*ip++ 3f4012b8
+. . exec w 3f4012b8 w->name "(lit)" w->type "primitive"
+. . w->code()   x=*ip++ 000000fa 250
+. . ip=3ffc8ebc w=*ip++ 3f401330
+. . exec w 3f401330 w->name "ms" w->type "primitive"
+. . ip=3ffc8ec0 w=*ip++ 3f4012d0
+. . exec w 3f4012d0 w->name "(;)" w->type "primitive"
+. . w->code()   ip=rsPop()
+. ip=3ffc8f04 w=*ip++ 3f4012d0
+. exec w 3f4012d0 w->name "(;)" w->type "primitive"
+. w->code()   ip=rsPop()
+ip=0
