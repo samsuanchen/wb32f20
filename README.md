@@ -258,11 +258,46 @@ Alternatively, we could use "1 16 p!" to turn off or "0 16 p!" to turn on the bl
 
 #### a. system structure
 
-01. forth word, 3 pointers for each
+01. the forth vocabulay is a link-list of all the forth words (also known as the dictionary). Once we get the last forth word, we can reach each of the forth words, one by one.
 
-02. vocabulay, a link list of forth words (dictionary)
+    typedef struct Voc {  // the forth vocaburary type
+      Word         * last  ; // point to the last defined forth word
+    };
 
-03. data stack, an array of numbers
+02. Each forth word has 6 fields. prev is the first field. Its value points to the previous forth word.
+
+    typedef struct Word { // the forth word type
+      struct Word  * prev  ; // the address pointing to previous forth word
+      int            flag  ; // the flag info of the forth word
+      char         * type  ; // the address pointing to name of its creator
+      char         * name  ; // the address pointing to name of the forth word
+      FuncP          code  ; // pointing to the function code to execute
+      union P        p     ; // the parameter of the forth word
+    };
+
+03. p is the last field. Its value is the parameter used by different type of forth words.
+
+    union P {             // using a cell to hold one of the following:
+      int            con   ; // the value of forth constant word
+      int          * var   ; // the address pointing to int var of forth variable word
+      int          * val   ; // the address pointing to int val of forth value word
+      int          * ibf   ; // the address pointing to int ibf[] of forth int buffer word
+      char         * cbf   ; // the address pointing to char cbf[] of forth char buffer word
+      struct Word ** wpl   ; // the address pointing to Word* wpl[] (the word pointer list) of forth colon word
+    };
+
+03. data stack, an array of integers
+
+    void	dsClear();          // clearing data stack
+    void	dsPush(int n);      // pushing a number onto data stack
+    int		dsPop();            // popping a number from data stack
+    int		dsDepth();          // returing depth of data stack
+    boolean dsHasItems (int n); // checking if data stack having at least n items
+    boolean dsHasSpace (int n); // checking if data stack having enough space for n items
+    boolean dsFull();           // checking if data stack full
+    void    dsShow();           // showing info of data stack
+
+4.
 
 #### b. user interface
 

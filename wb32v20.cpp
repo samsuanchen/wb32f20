@@ -259,12 +259,13 @@ void    WB32V10::words(char*sub) { // show all word names having specific substr
   while (w) { 
     if(!*sub || strstr(w->name,sub) ){
       n=strlen(w->name);
-      if(m+n>CONSOLE_WIDTH)PRINTF("\n"), m=0;
+      if(m+n>CONSOLE_WIDTH) PRINTF("\n"), m=0;
       if(m)PRINTF(" "), m++;
       PRINTF(w->name), m+=n;
     }
     w=w->prev;
   }
+  PRINTF("\n");
 }
 /////// ------------------------------- /////////////////////////////////////////////////////////////////
 void    WB32V10::see(Word *w) { // show the forth word
@@ -327,7 +328,9 @@ void    WB32V10::dump(int *a,int n) { // dump n cells at adr
     }
 }
 /////// ------------------------------- /////////////////////////////////////////////////////////////////
-void    WB32V10::vocInit (Word *last) {
+void    WB32V10::init (Word *last) {
   voc = (Voc*) malloc(sizeof(Voc));
-  voc->last = last;
+  voc->last = last;   // initializing the link-list of 26 forth words as the forth vocabulary (dictionary)
+  dsClear();          // clearing data stack
+  rsClear();          // clearing return stack
 }

@@ -59,6 +59,8 @@ class WB32V10 {
     WB32V10 () {}
     virtual ~WB32V10 () {}
     /////////////////////////////////////////////////////////////////////////////////////////////////////
+    void    init (Word* last);      // linking the vocabulary to last and reset data stack and return stack
+    /////////////////////////////////////////////////////////////////////////////////////////////////////
     boolean EOL (char c);           // checking if c is end of line
     boolean backSpace (char c);     // checking if c is back space
     boolean whiteSpace (char c);    // checking if c is white space
@@ -114,7 +116,6 @@ class WB32V10 {
     Word*   create(char*n, FuncP f);// creating a forth word of name n with the function code f to execute
     Voc*    vocGet ();              // returning the vocabulary
     Word*   vocSearch (char *name); // searching the forth word of given name in the vocabulary
-    void    vocInit (Word* last);   // linking the vocabulary to last
     void    vocAdd (Word *w);       // adding w to the vocabulary
     /////////////////////////////////////////////////////////////////////////////////////////////////////
     Word**  adrExecWord ();         // get the forth word to execute
