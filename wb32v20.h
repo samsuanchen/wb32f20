@@ -1,23 +1,24 @@
-// wb32v10.h
-#ifndef _WB32V10_H_
-#define _WB32V10_H_
+// wb32v20.h
+#ifndef _WB32V20_H_
+#define _WB32V20_H_
 #include "Arduino.h"
 /////////////////////////////////////////////////////////////////////////////////////////////////////////
+#define SHOW_MESSAGE(FORMAT,ID, ...) error=ID; Serial.printf(FORMAT,ID,__VA_ARGS__)
 #define PRINTF		Serial.printf
 #define AVAILABLE	Serial.available
 #define READ		  Serial.read
 #define WRITE		  Serial.write
 /////////////////////////////////////////////////////////////////////////////////////////////////////////
-#define TIB_SIZE 	1024
-#define TMP_SIZE	256
-#define DS_DEPTH	32
-#define RS_DEPTH  32
-#define CS_LEN    1024
-#define SB_LEN    4096
-#define DS_LIMIT	(DS+DS_DEPTH-1) // data   stack limit
-#define RS_LIMIT  (RS+RS_DEPTH-1) // return stack limit
-#define CS_LIMIT  (CS+CS_LEN  -1) // temp  wplist limit
-#define SB_LIMIT  (SB+SB_LEN  -1) // string buffer limit
+#define TIB_SIZE 	80              // size of terminal input char buffer for collecting input characters
+#define TMP_SIZE	256             // size of temporary      char buffer for parsing token or coverting number to digits
+#define DS_SIZE   32              // size of data   stack
+#define RS_SIZE   32              // size of return stack
+#define CS_SIZE   1024            // size of temporary compile space for wplist of a forth colon word
+#define SB_SIZE   4096            // size of string buffer for saving all unique strings
+#define DS_LIMIT	(DS+DS_SIZE-1)  // data   stack limit
+#define RS_LIMIT  (RS+RS_SIZE-1)  // return stack limit
+#define CS_LIMIT  (CS+CS_SIZE-1)  // temp  wplist limit
+#define SB_LIMIT  (SB+SB_SIZE-1)  // string buffer limit
 #define SL_LIMIT  253             // string length limit
 #define LAST NULL
 #define CONSOLE_WIDTH 80
@@ -50,16 +51,17 @@ typedef struct Voc {  // the forth vocaburary type
   Word         * last  ; // point to the last defined forth word
 };
 /////////////////////////////////////////////////////////////////////////////////////////////////////////
-class WB32V10;
+class WB32V20;
 /////////////////////////////////////////////////////////////////////////////////////////////////////////
-class WB32V10 {
+class WB32V20 {
   ///////////////////////////////////////////////////////////////////////////////////////////////////////
   public:
   ///////////////////////////////////////////////////////////////////////////////////////////////////////
-    WB32V10 () {}
-    virtual ~WB32V10 () {}
+    WB32V20 () {}
+    virtual ~WB32V20 () {}
     /////////////////////////////////////////////////////////////////////////////////////////////////////
     void    init (Word* last);      // linking the vocabulary to last and reset data stack and return stack
+    boolean isColonWord (Word *w);  // checking if w is a forth word
     /////////////////////////////////////////////////////////////////////////////////////////////////////
     boolean EOL (char c);           // checking if c is end of line
     boolean backSpace (char c);     // checking if c is back space
@@ -98,7 +100,6 @@ class WB32V10 {
     char	  toDigit(int x);         // converting integer x into single digit
     char*	  toDigits(uint x, int b);// converting integer x into digits
     int     toNumber(char *token);  // converting token to an integer number
-    void    eval(char *token);      // evaluating given token
     void    interpret(char* line);  // interpreting given string
     void    traceIP(Word** ip);
     void    traceWord(Word** ip, Word* w);
@@ -106,7 +107,7 @@ class WB32V10 {
     void    call (Word** wplist);   // inner interpreting wplist of a forth colon word
     /////////////////////////////////////////////////////////////////////////////////////////////////////
     void    cpInit();               // initializing temporary wplist, setting CP=CS
-    void    wpPush(Word*w);         // pushing w into temporary wplist
+    void    compile(Word*w);        // compile w into temporary wplist
     Word**  wpClone();              // copying temporary wplist as a new wplist
     void    ipSet(Word**ip);        // setting IP=ip of wplist
     Word**  ipGet();                // get IP
@@ -137,24 +138,39 @@ class WB32V10 {
     void	  words (char *sub);      // show all word names having specific substring
     void 	  see (Word *w);          // show the forth word w
     void	  dump (int *a, int n);   // dump ( adr n -- ) // dump n cells at adr
+    /////////////////////////////////////////////////////////////////////////////////////////////////////
+    void    readLineBegin ();       // begining   of read input line to tib
+    void    readLineContinue ();    // continuing of read input line to tib
+    void    readLineEnd ();         // end        of read input line to tib
+    /////////////////////////////////////////////////////////////////////////////////////////////////////
+    void    _doConstant ();         // return constant value
+    void    _doVariable ();         // return address of variable
+    void    _doColon ();            // interpret the wplist of forth colon word
+    void    _doValue ();            // return value 
+    void    _doIBuf ();             // return address of n-cell buffer
+    void    _doCBuf ();             // return address of n-byte buffer
   ///////////////////////////////////////////////////////////////////////////////////////////////////////
   private:
   ///////////////////////////////////////////////////////////////////////////////////////////////////////
-    char    SB[SB_LEN];             // string buffer to hold all unique srings
+    char    SB[SB_SIZE];             // string buffer to hold all unique srings
     char*   sbEnd=SB;               // string buffer end
     char    tib[TIB_SIZE];          // terminal input buffer
     char    tmp[TMP_SIZE];          // tmp buffer used in parseToken() and toDigits()
-	  char*   tibBegin;               // terminal input buffer begin
-	  char*   tibEnd;                 // terminal input buffer end
-	  char*   tibLimit;               // terminal input buffer limit
-    char*   parseRemain;            // terminal input buffer remain for parsing
+	  char*   tBegin=tib;             // terminal input buffer begin address
+	  char*   tEnd=tib;               // terminal input buffer end   address ( tib is empty, tEnd-tBegin=0 )
+	  char*   tLimit=tib+TIB_SIZE-1;  // terminal input buffer limit address ( tEnd <= tLimit )
+    boolean tReady=true;            // ready to push char into tib   
+    char*   pBegin;                 // string parsing begin address
+    char*   pEnd;                   // string parsing end   address
+    char*   pLimit=tEnd;            // string parsing limit address
+    boolean pReady=false;           //
 	  /////////////////////////////////////////////////////////////////////////////////////////////////////
-    int     DS[DS_DEPTH];           // data stack
+    int     DS[DS_SIZE];           // data stack
     int*    DP;                     // data stack pointer
     int     T;                      // top of data stack
-    int     RS[RS_DEPTH];           // return stack
+    int     RS[RS_SIZE];           // return stack
     int*    RP;                     // return stack pointer
-    Word*   CS[CS_LEN];             // temporary compile space for a new forth colon word
+    Word*   CS[CS_SIZE];             // temporary compile space for a new forth colon word
     Word**  CP;                     // pointing to temporary compile space of a forth colon word
     Word**  IP;                     // pointing to current running wplist of a forth colon word
     Voc*    voc;                    // the vocabulary
@@ -163,6 +179,9 @@ class WB32V10 {
     int     state=INTERPRETING;     // INTERPRETING or COMPILING
     int     error;                  // error id
     int     tracing=0;              // tracing depth
+  /////////////////////////////////////////////////////////////////////////////////////////////////////////
+  int led=16,/*LeftButtons*/LB=33,LG=17,LR=32,LY=27,/*RightButtons*/RY=34,RB=35,/*BackButton*/PROG=0;
+  int buttons[7]={/*LeftButtons*/LB,LG,LR,LY,/*RightButtons*/RY,RB,/*BackButton*/PROG};
 	/////////////////////////////////////////////////////////////////////////////////////////////////////////
 };
-#endif _WB32V10_H
+#endif _WB32V20_H

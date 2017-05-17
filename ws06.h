@@ -69,7 +69,7 @@ void _colon() { // : ( <name> -- )
 const Word W_colon PROGMEM = {(Word*)&W_lit, 0, "primitive", ":", _colon, 0};
 //////////////////////////////////////////////////////////////////////////
 void _semicolon() { // ; ( -- )
-    V.wpPush((Word*)&W_ret);
+    V.compile((Word*)&W_ret);
     Word* w=V.vocGet()->last;
     w->flag=REVEAL_WORD;
     w->p.wpl = V.wpClone();

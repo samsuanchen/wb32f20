@@ -1,18 +1,18 @@
-#include "wb32v10.h"
+#include "wb32v20.h"
 /////// --------------------------------- /////////////////////////////////////////////////////////////////
-boolean WB32V10::EOL (char c)           { return c=='\n'||c=='\r'; } // check if c is end of line
-boolean WB32V10::backSpace (char c)     { return c=='\b'; } // check if c is back space
-boolean WB32V10::whiteSpace (char c)    { return c==' '||c=='\t'||c=='\n'||c=='\r'; } // check if c is white space
+boolean WB32V20::EOL (char c)           { return c=='\n'||c=='\r'; } // check if c is end of line
+boolean WB32V20::backSpace (char c)     { return c=='\b'; } // check if c is back space
+boolean WB32V20::whiteSpace (char c)    { return c==' '||c=='\t'||c=='\n'||c=='\r'; } // check if c is white space
 /////// --------------------------------- /////////////////////////////////////////////////////////////////
-void    WB32V10::tibOpen ()             { tibBegin=tibEnd=tib,tibLimit=tib+TIB_SIZE-1; } // init tib and wait for input
-void    WB32V10::tibClose ()            { *tibEnd='\0'; } // add '\0' at end of input
-void    WB32V10::tibPop ()              { --tibEnd; } // pop last input character
-void    WB32V10::tibPush (char c)       { *(tibEnd++)=c; } // collect input character
-boolean WB32V10::tibEmpty ()            { return tibEnd==tibBegin; } // check if buffer is empty
-boolean WB32V10::tibFull ()             { return tibEnd==tibLimit; } // check if buffer is full
+void    WB32V20::tibOpen ()             { tBegin=tEnd=tib; tReady=true; } // init tib waiting for input
+void    WB32V20::tibClose ()            { *tEnd='\0'; } // add '\0' at end of input
+void    WB32V20::tibPop ()              { --tEnd; } // pop last input character
+void    WB32V20::tibPush (char c)       { *(tEnd++)=c; } // collect input character
+boolean WB32V20::tibEmpty ()            { return tEnd==tBegin; } // check if buffer is empty
+boolean WB32V20::tibFull ()             { return tEnd==tLimit; } // check if buffer is full
 /////// --------------------------------- /////////////////////////////////////////////////////////////////
-void	  WB32V10::waitInput ()           {  while ( !AVAILABLE() ); } // read input characters until end of line
-char*   WB32V10::readLine ()            { // read input characters until end of line
+void	  WB32V20::waitInput ()           {  while ( !AVAILABLE() ); } // read input characters until end of line
+char*   WB32V20::readLine ()            { // read input characters until end of line
   tibOpen();
   while ( AVAILABLE() ) {
     char c=READ(); // get input char
@@ -29,19 +29,19 @@ char*   WB32V10::readLine ()            { // read input characters until end of 
   }
 }
 /////// ------------------------------- /////////////////////////////////////////////////////////////////
-void    WB32V10::parseBegin (char *str) { parseRemain = tibBegin = str; tibEnd = tibBegin+strlen(str); }
-char    WB32V10::parseAvailable ()      { return *parseRemain; } // non '\0' means available to parse
-char*	  WB32V10::parseToken ()          { // use white spaces as delimiters to parse a token
-  char c = *parseRemain;
-  while ( c && whiteSpace(c) ) c = *++parseRemain; // ignore leading white spaces
-  char *start = parseRemain; // set start at non white space
+void    WB32V20::parseBegin (char *str) { pEnd=pBegin=str; pLimit=tEnd; pReady=1; tReady=0; }
+char    WB32V20::parseAvailable ()      { return *pEnd; } // non '\0' means available to parse
+char*	  WB32V20::parseToken ()          { // use white spaces as delimiters to parse a token
+  char c = *pEnd;
+  while ( c && whiteSpace(c) ) c = *++pEnd; // ignore leading white spaces
+  char *start = pEnd; // set start at non white space
   if ( c ) {
-    while ( c && !whiteSpace(c) ) c = *++parseRemain; // colect  non white spaces
-    char *limit = parseRemain; // set limit at white space
+    while ( c && !whiteSpace(c) ) c = *++pEnd; // colect  non white spaces
+    char *limit = pEnd; // set limit at white space
     if ( c ) { // if not end of string
       int n=limit-start;
       if ( n>TMP_SIZE-1 ) { //
-      	PRINTF("\n error WB32V10::parseToken length %d > %d\n",n,TMP_SIZE-1);
+      	PRINTF("\n error WB32V20::parseToken length %d > %d\n",n,TMP_SIZE-1);
       	return start;
       }
       strncpy(tmp,start,n);
@@ -51,25 +51,25 @@ char*	  WB32V10::parseToken ()          { // use white spaces as delimiters to p
   }
   return start;
 }
-void WB32V10::traceIP(Word** ip){
+void WB32V20::traceIP(Word** ip){
   int depth=rsDepth();
   PRINTF("tracing %08x %08x ",ip,W);
   for(int i=1; i<depth; i++) PRINTF("| ");
 }
-void WB32V10::traceWord(Word** ip,Word* w){
+void WB32V20::traceWord(Word** ip,Word* w){
   if(tracing){
     traceIP(ip);
     PRINTF("%s\n",W->name);
   }
 }
-void WB32V10::traceData(Word**ip,int n){
+void WB32V20::traceData(Word**ip,int n){
   if(tracing){
     traceIP(ip);
     PRINTF("%d\n",n);
   }
 }
 /////// ------------------------------- /////////////////////////////////////////////////////////////////
-void    WB32V10::call (Word**wplist)    { // inner interpreting the wplist of a forth colon word
+void    WB32V20::call (Word**wplist)    { // inner interpreting the wplist of a forth colon word
   rsPush((int)IP);
   IP=wplist;
   while(IP){
@@ -80,16 +80,39 @@ void    WB32V10::call (Word**wplist)    { // inner interpreting the wplist of a 
   }
 }
 /////// ------------------------------- /////////////////////////////////////////////////////////////////
-void	  WB32V10::interpret (char *line) { // interpreting given string
+void	  WB32V20::interpret (char *line) { // interpreting given string
+  pBegin = pEnd = line;  // no more input until end of interpreting
+  pLimit = line+strlen(line); 
   parseBegin(line);
-  while ( parseAvailable() ) {
+  while ( *pEnd ) {
     char *token = parseToken();
-    eval(token);
+    char *remain, *p=token, c;
+    W=vocSearch(token);
+    Word* wLit;
+    if(!wLit) wLit=vocSearch("(lit)");
+    if(W){
+      if(state==INTERPRETING || W->flag==IMMID_WORD){
+        IP=0;
+        W->code();
+      } else {
+        compile(W); 
+      }
+    } else {
+      int n=toNumber(token);
+      if(!getError()){
+        if(state==INTERPRETING){
+          dsPush(n);
+        } else {
+          compile(wLit);
+          compile((Word*)n);
+        }
+      }
+    }
   }
-  PRINTF("\n");
+  readLineBegin(); 
 }
 /////// ------------------------------- /////////////////////////////////////////////////////////////////
-int	WB32V10::toNumber(char *token){
+int	WB32V20::toNumber(char *token){
   char *remain, *p, c;
   int b, n;
   if(remain=hexPrefix(token)){
@@ -105,33 +128,7 @@ int	WB32V10::toNumber(char *token){
   return n;
 }
 /////// ------------------------------- /////////////////////////////////////////////////////////////////
-void WB32V10::eval(char *token){
-  char *remain, *p=token, c;
-  W=vocSearch(token);
-  Word* wLit;
-  if(!wLit) wLit=vocSearch("(lit)");
-  if(W){
-    if(state==INTERPRETING || W->flag==IMMID_WORD){
-      IP=0;
-      W->code();
-      return;
-    } else {
-      wpPush(W); 
-    }
-  } else {
-    int n=toNumber(token);
-    if(!getError()){
-      if(state==INTERPRETING){
-        dsPush(n);
-      } else {
-        wpPush(wLit);
-        wpPush((Word*)n);
-      }
-    }
-  }
-}
-/////// ------------------------------- /////////////////////////////////////////////////////////////////
-void	WB32V10::dsShow(){ // show data stack info
+void	WB32V20::dsShow(){ // show data stack info
   PRINTF("< dsDepth %d [ ",dsDepth()); // show depth
   if(dsDepth()>0){
     if(dsDepth()>5)PRINTF(".. "); // showing at most top 5 items
@@ -140,23 +137,23 @@ void	WB32V10::dsShow(){ // show data stack info
   PRINTF("] base%d >\n",B); // show base 
 }
 /////// ------------------------------- /////////////////////////////////////////////////////////////////
-boolean WB32V10::dsFull     ()      { return DP   >= DS+DS_DEPTH; } // check if data stack full
-boolean WB32V10::dsHasSpace (int n) { return DP+n <= DS+DS_DEPTH; } // check if data stack has space for n items
-boolean WB32V10::dsHasItems (int n) { return DP >= DS+n-1       ; } // check if data stack has n items
-boolean WB32V10::rsHasItems (int n) { return RP >= RS+n-1       ; } // check if return stack has n items
+boolean WB32V20::dsFull     ()      { return DP   >= DS+DS_SIZE; } // check if data stack full
+boolean WB32V20::dsHasSpace (int n) { return DP+n <= DS+DS_SIZE; } // check if data stack has space for n items
+boolean WB32V20::dsHasItems (int n) { return DP >= DS+n-1       ; } // check if data stack has n items
+boolean WB32V20::rsHasItems (int n) { return RP >= RS+n-1       ; } // check if return stack has n items
 /////// ------------------------------- /////////////////////////////////////////////////////////////////
-void    WB32V10::dsClear  () { DP=DS-1 ; } // reset data stack
-void    WB32V10::dsPush   (int n) { T=n, *(++DP)=T; } // push a number onto data stack
-int     WB32V10::dsPop    () { return *DP-- ; } // pop a number from data stack
-int     WB32V10::dsDepth  () { return DP-DS+1; } // depth of data stack
+void    WB32V20::dsClear  () { DP=DS-1 ; } // reset data stack
+void    WB32V20::dsPush   (int n) { T=n, *(++DP)=T; } // push a number onto data stack
+int     WB32V20::dsPop    () { return *DP-- ; } // pop a number from data stack
+int     WB32V20::dsDepth  () { return DP-DS+1; } // depth of data stack
 /////// ------------------------------- /////////////////////////////////////////////////////////////////
-void    WB32V10::rsClear  () { RP=RS-1 ; } // reset return stack
-void    WB32V10::rsPush   (int n) { T=n, *(++RP)=T; } // push a number onto return stack
-int     WB32V10::rsPop    () { return *RP-- ; } // pop a number from return stack
-int     WB32V10::rsDepth  () { return RP-RS+1; } // depth of return stack
+void    WB32V20::rsClear  () { RP=RS-1 ; } // reset return stack
+void    WB32V20::rsPush   (int n) { T=n, *(++RP)=T; } // push a number onto return stack
+int     WB32V20::rsPop    () { return *RP-- ; } // pop a number from return stack
+int     WB32V20::rsDepth  () { return RP-RS+1; } // depth of return stack
 /////// ------------------------------- /////////////////////////////////////////////////////////////////
-char    WB32V10::toDigit  (int x) { return x += x<10 ? 0x30 : 0x61-10; } // convert integer x into single digit
-char*   WB32V10::toDigits (uint x, int b) { // convert integer x into digits in given base b
+char    WB32V20::toDigit  (int x) { return x += x<10 ? 0x30 : 0x61-10; } // convert integer x into single digit
+char*   WB32V20::toDigits (uint x, int b) { // convert integer x into digits in given base b
   char*p=tmp+TMP_SIZE; *(--p)='\0';
   if(x==0){ *(--p)='0'; return p; }
   boolean neg; if( neg=(b==10&&(int)x<0) ) x=-x;
@@ -167,30 +164,30 @@ char*   WB32V10::toDigits (uint x, int b) { // convert integer x into digits in 
   return p;
 }
 /////// ------------------------------- /////////////////////////////////////////////////////////////////
-Word**  WB32V10::adrExecWord () { return &W;     }; // get the forth word to execute
-void    WB32V10::setExecWord (Word* w) { W=w;    }; // set the forth word to execute
-Word*   WB32V10::getExecWord () { return W;      }; // get the forth word to execute
-int*    WB32V10::adrBase () { return &B;         }; // get number convertion base B
-void	  WB32V10::setBase (int b) { B=b;          }; // set b as number convertion base B
-int		  WB32V10::getBase () { return B;          }; // get number convertion base B
-int*    WB32V10::adrState () {return &state;     }; // get state COMPILING/INTERPRETING
-void    WB32V10::setState (int s) { state=s;     }; // set s as state COMPILING/INTERPRETING
-int     WB32V10::getState () {return state;      }; // get state COMPILING/INTERPRETING
-int*    WB32V10::adrError () {return &error;     }; // get error id to see if error
-void    WB32V10::setError (int e) { error=e;     }; // set non-zero e as error id
-int     WB32V10::getError () {return error;      }; // get error id to see if error
-int*    WB32V10::adrTracing () {return &tracing; }; // get depth of tracing
-void    WB32V10::setTracing (int t) {tracing=t;  }; // set depth of tracing=t
-int     WB32V10::getTracing () {return tracing;  }; // get depth of tracing
+Word**  WB32V20::adrExecWord () { return &W;     }; // get the forth word to execute
+void    WB32V20::setExecWord (Word* w) { W=w;    }; // set the forth word to execute
+Word*   WB32V20::getExecWord () { return W;      }; // get the forth word to execute
+int*    WB32V20::adrBase () { return &B;         }; // get number convertion base B
+void	  WB32V20::setBase (int b) { B=b;          }; // set b as number convertion base B
+int		  WB32V20::getBase () { return B;          }; // get number convertion base B
+int*    WB32V20::adrState () {return &state;     }; // get state COMPILING/INTERPRETING
+void    WB32V20::setState (int s) { state=s;     }; // set s as state COMPILING/INTERPRETING
+int     WB32V20::getState () {return state;      }; // get state COMPILING/INTERPRETING
+int*    WB32V20::adrError () {return &error;     }; // get error id to see if error
+void    WB32V20::setError (int e) { error=e;     }; // set non-zero e as error id
+int     WB32V20::getError () {return error;      }; // get error id to see if error
+int*    WB32V20::adrTracing () {return &tracing; }; // get depth of tracing
+void    WB32V20::setTracing (int t) {tracing=t;  }; // set depth of tracing=t
+int     WB32V20::getTracing () {return tracing;  }; // get depth of tracing
 /////// ------------------------------- /////////////////////////////////////////////////////////////////
-char*	  WB32V10::hexPrefix(char *s) { // 0xff 0XFF $ff $FF $Ff are all acceptable as hexadecimal numbers
+char*	  WB32V20::hexPrefix(char *s) { // 0xff 0XFF $ff $FF $Ff are all acceptable as hexadecimal numbers
   char c;
   if((c=*s++) != '0' && c != '$') return 0;
   if(c=='0' && (c=*s++) != 'x' && c != 'X') return 0;
   return s; // remain string
 }
 /////// ------------------------------- /////////////////////////////////////////////////////////////////
-char*   WB32V10::uniqueString(char *s) { // 在 string buffer 備存字串 並回應 存放位址 p
+char*   WB32V20::uniqueString(char *s) { // 在 string buffer 備存字串 並回應 存放位址 p
   char *p=SB+1;                 // p is pointing to the first string
   while (p<sbEnd) {             // if p is not pointing to end of buffer
     if(!strcmp(p,s)) return p;  // return p if s is found in the string buffer
@@ -214,7 +211,7 @@ char*   WB32V10::uniqueString(char *s) { // 在 string buffer 備存字串 並�
   return p;
 }
 /////// ------------------------------- /////////////////////////////////////////////////////////////////
-Word*   WB32V10::create(char*n, FuncP f){// create a forth word of name n with the function code f to execute
+Word*   WB32V20::create(char*n, FuncP f){// create a forth word of name n with the function code f to execute
     char*u;
     Word *w=(Word*)malloc(sizeof(Word));
     Word *x=vocSearch(n);
@@ -231,28 +228,27 @@ Word*   WB32V10::create(char*n, FuncP f){// create a forth word of name n with t
     return w;
 }
 /////// ------------------------------- /////////////////////////////////////////////////////////////////
-void    WB32V10::wpPush (Word*w) { *CP++=w; } // push wp into temporary wplist
-void    WB32V10::cpInit () { CP=CS;         } // initialize tmp wplist
-void    WB32V10::ipSet (Word**ip) { IP=ip;  } // set IP of wplist
-Word**  WB32V10::ipGet () { return IP;      } // get IP of wplist
-Word*   WB32V10::wpNext() { return *IP++;   } // get next wp and increase IP
+void    WB32V20::cpInit () { CP=CS;          } // initialize temporary compile space
+void    WB32V20::compile (Word*w) { *CP++=w; } // compile w into temporary compile space
+void    WB32V20::ipSet (Word**ip) { IP=ip;   } // set IP of wplist 
+Word**  WB32V20::ipGet () { return IP;       } // get IP of wplist
 /////// ------------------------------- /////////////////////////////////////////////////////////////////
-Word**  WB32V10::wpClone() {              // cloning temporary compile space to a wplist
+Word**  WB32V20::wpClone() {              // cloning temporary compile space to a wplist
     int n=CP-CS, m=n*sizeof(Word*);
     Word** wplist=(Word**)malloc(m);
     memcpy(wplist,CS,m);
     return wplist;
 }
 /////// ------------------------------- /////////////////////////////////////////////////////////////////
-Voc*    WB32V10::vocGet() { return voc; } // return vocabulary
-void    WB32V10::vocAdd (Word *w) { w->prev = voc->last; voc->last=w; } // add w to vocabulary
-Word*	  WB32V10::vocSearch (char *name) { // search vocabulary for the forth word of given name
+Voc*    WB32V20::vocGet() { return voc; } // return vocabulary
+void    WB32V20::vocAdd (Word *w) { w->prev = voc->last; voc->last=w; } // add w to vocabulary
+Word*	  WB32V20::vocSearch (char *name) { // search vocabulary for the forth word of given name
   Word *w=vocGet()->last;
   while ( w && strcmp(w->name,name) ) w=w->prev;
   return w;
 }
 /////// ------------------------------- /////////////////////////////////////////////////////////////////
-void    WB32V10::words(char*sub) { // show all word names having specific substring
+void    WB32V20::words(char*sub) { // show all word names having specific substring
   PRINTF("\n");
   int m=0, n;
   Word *w=vocGet()->last;
@@ -268,7 +264,7 @@ void    WB32V10::words(char*sub) { // show all word names having specific substr
   PRINTF("\n");
 }
 /////// ------------------------------- /////////////////////////////////////////////////////////////////
-void    WB32V10::see(Word *w) { // show the forth word
+void    WB32V20::see(Word *w) { // show the forth word
   if(!w){ PRINTF(" ? undefinded "); return; }
   PRINTF("\n----------------------");
   PRINTF("\n%x prev %08x"            ,&w->prev ,w->prev        );
@@ -294,7 +290,7 @@ void    WB32V10::see(Word *w) { // show the forth word
   PRINTF("forth %s word %s\n"       , w->type, w->name        );
 }
 /////// ------------------------------- /////////////////////////////////////////////////////////////////
-void    WB32V10::dump(int *a,int n) { // dump n cells at adr
+void    WB32V20::dump(int *a,int n) { // dump n cells at adr
     int *lmt=a+n;
     char *ba;
     char *blmt;
@@ -328,9 +324,65 @@ void    WB32V10::dump(int *a,int n) { // dump n cells at adr
     }
 }
 /////// ------------------------------- /////////////////////////////////////////////////////////////////
-void    WB32V10::init (Word *last) {
+boolean WB32V20::isColonWord (Word *w) {
+  FuncP _doColon;
+  if ( ! _doColon ) {
+    _doColon = vocSearch("(:)")->code;
+    PRINTF("while checking 0x%x %s definde _doColon = 0x%x\n",w,w->name,_doColon);
+  }
+  return W->code == _doColon;
+}
+/////// ------------------------------- /////////////////////////////////////////////////////////////////
+void    WB32V20::readLineBegin () {
+  tBegin=tEnd=tib, tReady=true;
+  pinMode(16,INPUT); PRINTF("\nled %d ",digitalRead(led)); pinMode(16,OUTPUT);
+  PRINTF("LeftButtons ");
+  PRINTF("LB %d LG %d LR %d LY %d ", digitalRead(LB), digitalRead(LG), digitalRead(LR), digitalRead(LY));
+  PRINTF("RighttButtons ");
+  PRINTF("RY %d RB %d ", digitalRead(RY), digitalRead(RB));
+  PRINTF("BackButton ");
+  PRINTF("PROG %d\n",digitalRead(PROG));
+  dsShow();     // showing depth, numbers, and number coversion base of data stack 
+  static int i=0; // setting index of input line
+  PRINTF("--------------------------------------------------\n");
+  PRINTF("line %02d >> ", i++); // asking for input line i
+}
+/////// ------------------------------- /////////////////////////////////////////////////////////////////
+void    WB32V20::readLineEnd () {
+  PRINTF("%s\n",tib);
+  if ( tracing ) PRINTF("length %d tBegin 0x%x tEnd 0x%x",strlen(tib),tBegin,tEnd); // tib info
+  *tEnd = 0;      // add null at end of tib
+  tReady = false; // waiting to interpret tib
+  interpret(tib); // begin to interpret tib
+}
+/////// ------------------------------- /////////////////////////////////////////////////////////////////
+void    WB32V20::readLineContinue () {
+  if ( ! tReady )           return;  // interpreting of last input might not finished
+  if ( ! AVAILABLE() )        return;  // serial port not ready to read
+  char c = READ();                     // read character from serial port
+  if( error )                 return;  // press back side RESET button to 
+  if ( c == '\b' ) {                   // back space
+    if ( tEnd == tib )      return;     // just return if tib empty 
+    PRINTF("\b \b");                      // erase last character
+    tEnd--;                 return;     // ignore last character 
+  }
+  if ( c == '\r' || c == '\n' ) {      // if end of line
+    readLineEnd();            return;  // interpretBegin
+  }
+  if ( tEnd >= tLimit ) {
+    SHOW_MESSAGE("\n??? warning %03d tib $%x full ???\nbreak input at length %d\n",001,tib,tEnd-tib);
+    error = 0;                         // ignore 
+    readLineEnd();            return;
+  }
+  *tEnd++ = c;                       // push c into tib
+}
+/////// ------------------------------- /////////////////////////////////////////////////////////////////
+void    WB32V20::init (Word *last) {
+  for(int i=0; i<7; i++) pinMode(buttons[i],INPUT);  // setting pin mode direction of all the buttons as INPUT
   voc = (Voc*) malloc(sizeof(Voc));
   voc->last = last;   // initializing the link-list of 26 forth words as the forth vocabulary (dictionary)
   dsClear();          // clearing data stack
   rsClear();          // clearing return stack
+  error = 0;
+  PRINTF("\ntib 0x%x, tLimit 0x%x, TIB_SIZE %d\n",tib,tLimit,TIB_SIZE);
 }
