@@ -3,7 +3,7 @@
 #define _WB32V20_H_
 #include "Arduino.h"
 /////////////////////////////////////////////////////////////////////////////////////////////////////////
-#define SHOW_MESSAGE(FORMAT,ID, ...) error=ID; Serial.printf(FORMAT,ID,__VA_ARGS__)
+#define SHOW_MESSAGE(FORMAT,ID,...) error=ID;tReady=true;Serial.printf(FORMAT,ID,__VA_ARGS__)
 #define PRINTF		Serial.printf
 #define AVAILABLE	Serial.available
 #define READ		  Serial.read
@@ -60,26 +60,14 @@ class WB32V20 {
     WB32V20 () {}
     virtual ~WB32V20 () {}
     /////////////////////////////////////////////////////////////////////////////////////////////////////
+    void showMessage(char *format, uint8_t id, ...){error=id;tReady=true;va_list ap;Serial.printf(format,id,ap);}
+    /////////////////////////////////////////////////////////////////////////////////////////////////////
     void    init (Word* last);      // linking the vocabulary to last and reset data stack and return stack
     boolean isColonWord (Word *w);  // checking if w is a forth word
     /////////////////////////////////////////////////////////////////////////////////////////////////////
     boolean EOL (char c);           // checking if c is end of line
     boolean backSpace (char c);     // checking if c is back space
     boolean whiteSpace (char c);    // checking if c is white space
-    /////////////////////////////////////////////////////////////////////////////////////////////////////
-    boolean tibEmpty ();            // checking if buffer is empty
-    boolean tibFull ();             // checking if buffer is full
-    void    tibOpen ();             // starting to collect input characters
-    void    tibClose ();            // adding '\0' as end of input string
-    void    tibPop ();              // poping last input character
-    void    tibPush (char c);       // collecting input character
-    /////////////////////////////////////////////////////////////////////////////////////////////////////
-  	void    waitInput();            // waiting for input
-  	char*   readLine ();            // reading an input line
-    /////////////////////////////////////////////////////////////////////////////////////////////////////
-  	void    parseBegin (char* str); // starting to parse
-  	char    parseAvailable ();      // returning non '\0' means available to parse
-  	char*   parseToken ();          // parsing a token
     /////////////////////////////////////////////////////////////////////////////////////////////////////
     void	  dsClear();              // clearing data stack
     void	  dsPush(int n);          // pushing a number onto data stack
@@ -139,49 +127,61 @@ class WB32V20 {
     void 	  see (Word *w);          // show the forth word w
     void	  dump (int *a, int n);   // dump ( adr n -- ) // dump n cells at adr
     /////////////////////////////////////////////////////////////////////////////////////////////////////
+    void    toValue (Word*w,int n); // store n to w if w is type of "value"
+    void    ms (int n);             // wait n milli seconds
+    /////////////////////////////////////////////////////////////////////////////////////////////////////
+    void    ipPush ();              // push IP and IP_head to  return stack
+    void    ipPop  ();              // pop IP_head and IP from return stack
+    void    callBegin (Word*w);     // calling to forth colon word 
+    void    callContinue ();        // continue calling the wplist of a forth colon word
+    /////////////////////////////////////////////////////////////////////////////////////////////////////
+    void    parseBegin (char* str); // starting to parse
+    char*   parseToken ();          // parsing a token
+    void    parseContinue ();       // continuing to parse
+    /////////////////////////////////////////////////////////////////////////////////////////////////////
     void    readLineBegin ();       // begining   of read input line to tib
     void    readLineContinue ();    // continuing of read input line to tib
-    void    readLineEnd ();         // end        of read input line to tib
-    /////////////////////////////////////////////////////////////////////////////////////////////////////
-    void    _doConstant ();         // return constant value
-    void    _doVariable ();         // return address of variable
-    void    _doColon ();            // interpret the wplist of forth colon word
-    void    _doValue ();            // return value 
-    void    _doIBuf ();             // return address of n-cell buffer
-    void    _doCBuf ();             // return address of n-byte buffer
   ///////////////////////////////////////////////////////////////////////////////////////////////////////
   private:
   ///////////////////////////////////////////////////////////////////////////////////////////////////////
-    char    SB[SB_SIZE];             // string buffer to hold all unique srings
+    char    SB[SB_SIZE];            // string buffer to hold all unique srings
     char*   sbEnd=SB;               // string buffer end
     char    tib[TIB_SIZE];          // terminal input buffer
     char    tmp[TMP_SIZE];          // tmp buffer used in parseToken() and toDigits()
+    char*   tmpLimit=tmp+TMP_SIZE-1;//
 	  char*   tBegin=tib;             // terminal input buffer begin address
 	  char*   tEnd=tib;               // terminal input buffer end   address ( tib is empty, tEnd-tBegin=0 )
 	  char*   tLimit=tib+TIB_SIZE-1;  // terminal input buffer limit address ( tEnd <= tLimit )
-    boolean tReady=true;            // ready to push char into tib   
+    boolean tReady=false;           // ready to push char into tib   
     char*   pBegin;                 // string parsing begin address
     char*   pEnd;                   // string parsing end   address
     char*   pLimit=tEnd;            // string parsing limit address
-    boolean pReady=false;           //
+    boolean pReady=false;           // allowing to parse
+    char*   cBegin;                 // calling begin IP of the wplist
+    boolean cReady=false;           // allowing to call
 	  /////////////////////////////////////////////////////////////////////////////////////////////////////
-    int     DS[DS_SIZE];           // data stack
+    int     DS[DS_SIZE];            // data stack
     int*    DP;                     // data stack pointer
     int     T;                      // top of data stack
-    int     RS[RS_SIZE];           // return stack
+    int     RS[RS_SIZE];            // return stack
     int*    RP;                     // return stack pointer
-    Word*   CS[CS_SIZE];             // temporary compile space for a new forth colon word
+    Word*   CS[CS_SIZE];            // temporary compile space for a new forth colon word
     Word**  CP;                     // pointing to temporary compile space of a forth colon word
     Word**  IP;                     // pointing to current running wplist of a forth colon word
+    Word**  IP_head;                // pointing to current running wplist of a forth colon word
     Voc*    voc;                    // the vocabulary
     Word*   W;                      // pointing to the forth word to execute
     int		  B=10;                   // base for number conversion (at least 2, at most 36)
     int     state=INTERPRETING;     // INTERPRETING or COMPILING
-    int     error;                  // error id
-    int     tracing=0;              // tracing depth
-  /////////////////////////////////////////////////////////////////////////////////////////////////////////
-  int led=16,/*LeftButtons*/LB=33,LG=17,LR=32,LY=27,/*RightButtons*/RY=34,RB=35,/*BackButton*/PROG=0;
-  int buttons[7]={/*LeftButtons*/LB,LG,LR,LY,/*RightButtons*/RY,RB,/*BackButton*/PROG};
+    int     error=0;                // error id
+    int     tracing=1;              // tracing depth
+    int     checking=1;             // error checking
+    int     lineIndex=0;            // index of input line
+    int     waitTime=0;             // target time to wait requested by ms(n)
+/////////////////////////////////////////////////////////////////////////////////////////////////////////
+int   led=16,/*LeftButtons*/LB=33,LG=17,LR=32,LY=27,/*RightButtons*/RY=34,RB=35,/*BackButton*/PROG=0;
+int   buttons[7]={/*LeftButtons*/LB,LG,LR,LY,/*RightButtons*/RY,RB,/*BackButton*/PROG};
 	/////////////////////////////////////////////////////////////////////////////////////////////////////////
 };
-#endif _WB32V20_H
+
+#endif _WB32V20_H_

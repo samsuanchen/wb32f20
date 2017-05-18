@@ -4,112 +4,22 @@ boolean WB32V20::EOL (char c)           { return c=='\n'||c=='\r'; } // check if
 boolean WB32V20::backSpace (char c)     { return c=='\b'; } // check if c is back space
 boolean WB32V20::whiteSpace (char c)    { return c==' '||c=='\t'||c=='\n'||c=='\r'; } // check if c is white space
 /////// --------------------------------- /////////////////////////////////////////////////////////////////
-void    WB32V20::tibOpen ()             { tBegin=tEnd=tib; tReady=true; } // init tib waiting for input
-void    WB32V20::tibClose ()            { *tEnd='\0'; } // add '\0' at end of input
-void    WB32V20::tibPop ()              { --tEnd; } // pop last input character
-void    WB32V20::tibPush (char c)       { *(tEnd++)=c; } // collect input character
-boolean WB32V20::tibEmpty ()            { return tEnd==tBegin; } // check if buffer is empty
-boolean WB32V20::tibFull ()             { return tEnd==tLimit; } // check if buffer is full
-/////// --------------------------------- /////////////////////////////////////////////////////////////////
-void	  WB32V20::waitInput ()           {  while ( !AVAILABLE() ); } // read input characters until end of line
-char*   WB32V20::readLine ()            { // read input characters until end of line
-  tibOpen();
-  while ( AVAILABLE() ) {
-    char c=READ(); // get input char
-    if ( backSpace(c) ) { // if backspace
-      if ( !tibEmpty() ) tibPop(), PRINTF("\b \b");    // erase last input char
-    } else if ( EOL(c) || tibFull() ) {
-      tibPush('\0');
-      return tib;
-    } else {
-      tibPush(c); // collect character c
-      WRITE(c);
-      waitInput(); // wait until input available
-    }
-  }
-}
-/////// ------------------------------- /////////////////////////////////////////////////////////////////
-void    WB32V20::parseBegin (char *str) { pEnd=pBegin=str; pLimit=tEnd; pReady=1; tReady=0; }
-char    WB32V20::parseAvailable ()      { return *pEnd; } // non '\0' means available to parse
-char*	  WB32V20::parseToken ()          { // use white spaces as delimiters to parse a token
-  char c = *pEnd;
-  while ( c && whiteSpace(c) ) c = *++pEnd; // ignore leading white spaces
-  char *start = pEnd; // set start at non white space
-  if ( c ) {
-    while ( c && !whiteSpace(c) ) c = *++pEnd; // colect  non white spaces
-    char *limit = pEnd; // set limit at white space
-    if ( c ) { // if not end of string
-      int n=limit-start;
-      if ( n>TMP_SIZE-1 ) { //
-      	PRINTF("\n error WB32V20::parseToken length %d > %d\n",n,TMP_SIZE-1);
-      	return start;
-      }
-      strncpy(tmp,start,n);
-      tmp[n] = '\0'; // add null as the end of string
-      start = tmp;
-    }
-  }
-  return start;
-}
 void WB32V20::traceIP(Word** ip){
   int depth=rsDepth();
-  PRINTF("tracing %08x %08x ",ip,W);
-  for(int i=1; i<depth; i++) PRINTF("| ");
+  PRINTF("\ntracing %08x %08x ",ip,W);
+  for(int i=1; i<depth/2; i++) PRINTF("| ");
 }
 void WB32V20::traceWord(Word** ip,Word* w){
   if(tracing){
     traceIP(ip);
-    PRINTF("%s\n",W->name);
+    PRINTF("%s",W->name);
   }
 }
 void WB32V20::traceData(Word**ip,int n){
   if(tracing){
     traceIP(ip);
-    PRINTF("%d\n",n);
+    PRINTF("%d",n);
   }
-}
-/////// ------------------------------- /////////////////////////////////////////////////////////////////
-void    WB32V20::call (Word**wplist)    { // inner interpreting the wplist of a forth colon word
-  rsPush((int)IP);
-  IP=wplist;
-  while(IP){
-    W=*IP;
-    traceWord(IP,W);
-    W->code();
-    if(IP)IP++;
-  }
-}
-/////// ------------------------------- /////////////////////////////////////////////////////////////////
-void	  WB32V20::interpret (char *line) { // interpreting given string
-  pBegin = pEnd = line;  // no more input until end of interpreting
-  pLimit = line+strlen(line); 
-  parseBegin(line);
-  while ( *pEnd ) {
-    char *token = parseToken();
-    char *remain, *p=token, c;
-    W=vocSearch(token);
-    Word* wLit;
-    if(!wLit) wLit=vocSearch("(lit)");
-    if(W){
-      if(state==INTERPRETING || W->flag==IMMID_WORD){
-        IP=0;
-        W->code();
-      } else {
-        compile(W); 
-      }
-    } else {
-      int n=toNumber(token);
-      if(!getError()){
-        if(state==INTERPRETING){
-          dsPush(n);
-        } else {
-          compile(wLit);
-          compile((Word*)n);
-        }
-      }
-    }
-  }
-  readLineBegin(); 
 }
 /////// ------------------------------- /////////////////////////////////////////////////////////////////
 int	WB32V20::toNumber(char *token){
@@ -122,14 +32,13 @@ int	WB32V20::toNumber(char *token){
   }
   n=strtol(p, &remain, b); // conver string at p to integer n on base b (*remain is an illigal digit)
   if(c=*remain){
-    error=100;
-    PRINTF("\nerr %02d %s ? illigal '%c' at %d as base%d digit",error,token,c,remain-token,b);
+    showMessage("\n??? error %d ???\n%s undefined\n",101,token);
   }
   return n;
 }
 /////// ------------------------------- /////////////////////////////////////////////////////////////////
 void	WB32V20::dsShow(){ // show data stack info
-  PRINTF("< dsDepth %d [ ",dsDepth()); // show depth
+  PRINTF("\n< dsDepth %d [ ",dsDepth()); // show depth
   if(dsDepth()>0){
     if(dsDepth()>5)PRINTF(".. "); // showing at most top 5 items
     for ( int *i=max(DP-4,DS); i<=DP; i++ ) PRINTF("%s ",toDigits(*i,B)); // show data
@@ -265,6 +174,11 @@ void    WB32V20::words(char*sub) { // show all word names having specific substr
 }
 /////// ------------------------------- /////////////////////////////////////////////////////////////////
 void    WB32V20::see(Word *w) { // show the forth word
+  static Word *w_lit = 0, *w_ret = 0;
+  int _doColon = 0;
+  if( ! w_lit ) w_lit = vocSearch("(lit)");
+  if( ! w_ret ) w_ret = vocSearch("(;)");
+  if( ! _doColon ) _doColon = vocSearch("(:)")->p.con;
   if(!w){ PRINTF(" ? undefinded "); return; }
   PRINTF("\n----------------------");
   PRINTF("\n%x prev %08x"            ,&w->prev ,w->prev        );
@@ -274,17 +188,17 @@ void    WB32V20::see(Word *w) { // show the forth word
   PRINTF("\n%x code %08x"            ,&w->code ,w->code        );
   PRINTF("\n%x parm %08x"            ,&w->p    ,w->p           );
   PRINTF("\n----------------------\n");
-  if ( !strcmp(w->type,"colon") ){
+  if ( (int)w->code == _doColon ){
     Word**ip=w->p.wpl;
     Word*x;
     do {
        x=*ip;
        PRINTF("%x %08x %s%s\n",ip++,x,x->flag==IMMID_WORD?"[compile] ":"",x->name);
-       if(!strcmp(x->name,"(lit)")){
+       if( x == w_lit ){
           Word*z=*ip;
           PRINTF("%x %08x %d\n",ip++,z,z);
        }
-    } while(strcmp(x->name,"(;)"));
+    } while ( x != w_ret );
     PRINTF("----------------------\n");
   }
   PRINTF("forth %s word %s\n"       , w->type, w->name        );
@@ -325,54 +239,174 @@ void    WB32V20::dump(int *a,int n) { // dump n cells at adr
 }
 /////// ------------------------------- /////////////////////////////////////////////////////////////////
 boolean WB32V20::isColonWord (Word *w) {
-  FuncP _doColon;
+  FuncP _doColon=0;
   if ( ! _doColon ) {
     _doColon = vocSearch("(:)")->code;
-    PRINTF("while checking 0x%x %s definde _doColon = 0x%x\n",w,w->name,_doColon);
+    if ( tracing ) PRINTF("forth word %s 0x%x code 0x%x\n",w->name,w,_doColon);
   }
   return W->code == _doColon;
 }
 /////// ------------------------------- /////////////////////////////////////////////////////////////////
-void    WB32V20::readLineBegin () {
-  tBegin=tEnd=tib, tReady=true;
-  pinMode(16,INPUT); PRINTF("\nled %d ",digitalRead(led)); pinMode(16,OUTPUT);
-  PRINTF("LeftButtons ");
-  PRINTF("LB %d LG %d LR %d LY %d ", digitalRead(LB), digitalRead(LG), digitalRead(LR), digitalRead(LY));
-  PRINTF("RighttButtons ");
-  PRINTF("RY %d RB %d ", digitalRead(RY), digitalRead(RB));
-  PRINTF("BackButton ");
-  PRINTF("PROG %d\n",digitalRead(PROG));
-  dsShow();     // showing depth, numbers, and number coversion base of data stack 
-  static int i=0; // setting index of input line
-  PRINTF("--------------------------------------------------\n");
-  PRINTF("line %02d >> ", i++); // asking for input line i
+void    WB32V20::ms(int n){ waitTime=millis()+n; }  // waiting of n milli secons
+/////// ------------------------------- /////////////////////////////////////////////////////////////////
+char*    WB32V20::parseToken ()          { // use white spaces as delimiters to parse a token
+  char c = *pEnd;
+  while ( c && whiteSpace(c) ) c = *++pEnd; // ignore leading white spaces
+  char *tokenBegin = pEnd; // set tokenBegin at non white space
+  if ( c ) {
+    while ( c && !whiteSpace(c) ) c = *++pEnd; // colect  non white spaces
+    if ( c ) { // if not end of string
+      int n=pEnd-tokenBegin;
+      if ( n>TMP_SIZE-1 ) {
+        showMessage("\n??? error %03d ???\nparsing token length %d > %d\n",101,n,TMP_SIZE-1);
+        return tokenBegin;
+      }
+      strncpy(tmp,tokenBegin,n);
+      tmp[n] = 0; // add null as the end of string
+      tokenBegin = tmp;
+    }
+  }
+  return tokenBegin;
 }
 /////// ------------------------------- /////////////////////////////////////////////////////////////////
-void    WB32V20::readLineEnd () {
-  PRINTF("%s\n",tib);
-  if ( tracing ) PRINTF("length %d tBegin 0x%x tEnd 0x%x",strlen(tib),tBegin,tEnd); // tib info
-  *tEnd = 0;      // add null at end of tib
-  tReady = false; // waiting to interpret tib
-  interpret(tib); // begin to interpret tib
+void    WB32V20::call (Word**wplist)    { // inner interpreting the wplist of a forth colon word
+  rsPush( (int)IP );
+  IP = wplist;
+  while(IP){
+    W = *IP;
+    traceWord(IP, W);
+    W->code();
+    if( IP ) IP++;
+  }
+  if ( tracing ) PRINTF("\n");
+}
+/////// ------------------------------- /////////////////////////////////////////////////////////////////
+void    WB32V20::ipPush(){ rsPush((int)IP); rsPush((int)IP_head); }
+void    WB32V20::ipPop (){ IP_head=(Word**)rsPop (); IP=(Word**)rsPop(); }
+/////// ------------------------------- /////////////////////////////////////////////////////////////////
+void    WB32V20::callBegin (Word*w) { // calling to the wplist of a forth colon word
+  if ( tracing ) {
+    PRINTF ("\ncalling %s 0x%x tReady %d pReady %d cReady %d\n",w->name,w,tReady,pReady,cReady);
+  }
+  ipPush();
+  if ( tracing ) {
+    PRINTF ("push IP 0x%x IP_head 0x%x to retur stack, tReady %d pReady %d cReady %d\n",IP,IP_head,tReady,pReady,cReady);
+  }
+  IP_head = IP = w->p.wpl, pReady = 0, cReady = 1;
+  if ( tracing ) {
+    PRINTF ("set IP 0x%x IP_head 0x%x, tReady %d pReady %d cReady %d\n",IP,IP_head,tReady,pReady,cReady);
+  }
+}
+/////// ------------------------------- /////////////////////////////////////////////////////////////////
+void    WB32V20::callContinue ()    { // continue calling the wplist of a forth colon word
+  if ( ! digitalRead(LR) ) {                // press Left Red button to stop/resume parsing
+    cReady=0;
+    PRINTF("check callContinue 00 tReady %d pReady %d cReady %d since LR pressed\n",tReady,pReady,cReady);
+  }
+//PRINTF ("check callContinue 01 tReady %d pReady %d cReady %d\n",tReady,pReady,cReady);
+  if ( ! cReady )             return; // calling might be stoped
+  int t=millis();
+  PRINTF ("check callContinue 02 tReady %d pReady %d cReady %d millis %08x waitTime %08x\n",tReady,pReady,cReady,t,waitTime);
+  if ( t<waitTime )           return; // waiting asked by ms not finished 
+  if ( ! IP ) {                       // end of calling
+  //PRINTF ("check callContinue 03 tReady %d pReady %d cReady %d\n",tReady,pReady,cReady);
+    if ( tracing ) PRINTF("\n");         // next line
+    pReady = 1, cReady = 0;   return; // resume parsing 
+  }
+//PRINTF ("check callContinue 04 tReady %d pReady %d cReady %d IP 0x%x\n",tReady,pReady,cReady,IP);
+  W=*IP;                              // from IP, get the forth word
+//PRINTF ("check callContinue 05 tReady %d pReady %d cReady %d W  0x%x\n",tReady,pReady,cReady,W );
+  traceWord(IP,W);                    // showing IP and W
+//PRINTF ("check callContinue 06 tReady %d pReady %d cReady %d to   W->code 0x%x\n",tReady,pReady,cReady,W->code);
+  W->code();                          // execute the forth word W
+//PRINTF ("check callContinue 07 tReady %d pReady %d cReady %d from W->code 0x%x\n",tReady,pReady,cReady,W->code);
+  if ( IP ) IP++;                     // IP point to next forth word
+}
+/////// ------------------------------- /////////////////////////////////////////////////////////////////
+void    WB32V20::parseBegin (char *str) {
+  if( ! tReady ) PRINTF("line %02d >> ", lineIndex++); // asking for input of lineIndex
+  PRINTF("%s\n", str);
+  int n=strlen(str);
+  pBegin = pEnd = str, pLimit = str+n, pReady = 1, tReady = 0;
+  if ( tracing ) PRINTF("\npEnd 0x%x pLimit 0x%x *pLimit 0x%02x len %d tReady %d pReady %d\n",pEnd,pLimit,*pLimit,n,tReady,pReady);
+}
+/////// ------------------------------- /////////////////////////////////////////////////////////////////
+void    WB32V20::parseContinue() { // parse token to evaluate
+  if ( ! digitalRead(LR) ) {                // press Left Red button to stop/resume parsing
+    pReady=1-pReady, delay(100);
+    if( tracing ) PRINTF("readLineContinue pReady %d since LR pressed\n",pReady);
+  }
+  if ( ! pReady )                   return; // input line not available
+  if ( millis()<waitTime )          return; // waiting asked by ms not finished
+  if ( IP )                         return; // calling forth colon word not finished
+  if ( ! *pEnd ) {
+    readLineBegin();                return; // end of parsing
+  } // 
+  char *token = parseToken();               // getting token
+  W = vocSearch(token);                     // searching in vocabulary
+  if( tracing ) PRINTF("token \"%s\" length %d word 0x%x state %d\n",token,strlen(token),W,state);
+  if ( W ) {                                // if forth word W found
+    if( state==INTERPRETING ||                 // state is INTERPRETING or
+        W->flag==IMMID_WORD   ) {              // W is immediate
+      if( isColonWord(W) ) {                      // W is forth Colon word
+      	call(W->p.wpl);	return;
+      //callBegin(W);        return;          // call forth colon word W // 待 debug !!!!!!!!
+      } 
+      W->code();                    return;       // else execute the non-colon word W
+    }
+    compile(W);                     return;    // state is COMPILING, compile W to temporary wplist
+  }
+  int n=toNumber(token);                    // if not a forth word, convert token to number
+  if(error){                                // if not a valid number
+    PRINTF("\n??? %s undefined ???\n");
+    readLineBegin();                return;    // stop parsing
+  }
+  if(state==INTERPRETING){                  // if state is INTERPRETING
+    dsPush(n);                      return;    // push number to data stack
+  }
+  static Word* wLit = 0;                    // wLit points to the forth word (lit)
+  if( ! wLit ) {                            // if wLit not defined yet
+    wLit = vocSearch("(lit)");                 // get the address of the forth word (lit)
+    if(tracing) PRINTF("the forth word %s 0x%x\n",wLit->name,wLit);
+  }
+  compile(wLit), compile((Word*)n); return; // compile (lit) and the number n
+}
+/////// ------------------------------- /////////////////////////////////////////////////////////////////
+void    WB32V20::readLineBegin () {
+  tBegin=tEnd=tib, tReady=true, pReady=false, IP=0, waitTime=0;
+  dsShow();     // showing depth, numbers, and number coversion base of data stack 
+  if ( tracing ) {
+    delay(1000);
+    pinMode(16,INPUT); PRINTF("led %d ",digitalRead(led)); pinMode(16,OUTPUT);
+    PRINTF("LeftButtons ");
+    PRINTF("LB %d LG %d LR %d LY %d ", digitalRead(LB), digitalRead(LG), digitalRead(LR), digitalRead(LY));
+    PRINTF("RighttButtons ");
+    PRINTF("RY %d RB %d ", digitalRead(RY), digitalRead(RB));
+    PRINTF("BackButton ");
+    PRINTF("PROG %d\n",digitalRead(PROG));
+  }
+  PRINTF("--------------------------------------------------\n");
+  PRINTF("line %02d >> ", lineIndex++); // asking for input of lineIndex
 }
 /////// ------------------------------- /////////////////////////////////////////////////////////////////
 void    WB32V20::readLineContinue () {
   if ( ! tReady )           return;  // interpreting of last input might not finished
-  if ( ! AVAILABLE() )        return;  // serial port not ready to read
-  char c = READ();                     // read character from serial port
-  if( error )                 return;  // press back side RESET button to 
-  if ( c == '\b' ) {                   // back space
+  if ( ! AVAILABLE() )      return;  // serial port not ready to read
+  char c = READ();                   // read character from serial port
+  if( error )               return;  // press back side RESET button to 
+  if ( c == '\b' ) {                 // back space
     if ( tEnd == tib )      return;     // just return if tib empty 
-    PRINTF("\b \b");                      // erase last character
+    PRINTF("\b \b");                       // erase last character
     tEnd--;                 return;     // ignore last character 
   }
-  if ( c == '\r' || c == '\n' ) {      // if end of line
-    readLineEnd();            return;  // interpretBegin
+  if ( c == '\r' || c == '\n' ) {    // if end of line
+    *tEnd = 0;                          // add null at end of tib
+    parseBegin(tib);        return;     // interpretBegin
   }
   if ( tEnd >= tLimit ) {
-    SHOW_MESSAGE("\n??? warning %03d tib $%x full ???\nbreak input at length %d\n",001,tib,tEnd-tib);
-    error = 0;                         // ignore 
-    readLineEnd();            return;
+    showMessage("\n??? warning %03d tib $%x full ???\nsplit input at length %d\n",001,tib,tEnd-tib);
+    error = 0;                       // ignore 
+    parseBegin(tib);        return;
   }
   *tEnd++ = c;                       // push c into tib
 }
@@ -385,4 +419,14 @@ void    WB32V20::init (Word *last) {
   rsClear();          // clearing return stack
   error = 0;
   PRINTF("\ntib 0x%x, tLimit 0x%x, TIB_SIZE %d\n",tib,tLimit,TIB_SIZE);
+}
+/////// ------------------------------- /////////////////////////////////////////////////////////////////
+void    WB32V20::toValue (Word *w,int n){ // store n to w if it is a forth value word
+  if(tracing)PRINTF("\nstoring %d to the forth %s word %s \n ",n,w->type,w->name);
+  if ( checking && strcmp(w->type,"value") ) { // w is not a forth value word
+    showMessage("\n??? error %03d ???\ncannot store %d to non-value word %s ???\n",103,dsPop(),w->name);
+    return;
+  }
+  if ( tracing ) PRINTF("\nstore %d to the forth word %s of type %s\n",n,w->name, w->type);
+  *(w->p.val)=n;
 }

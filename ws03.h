@@ -18,5 +18,26 @@ void _dump  () { // 13. dump           ( a n -- ) show n cells at address a
 }
 const Word W_dump  PROGMEM={(Word*)&W_see, 0, "primitive", "dump", _dump, 0};
 //////////////////////////////////////////////////////////////////////////
-#define LAST (Word*)&W_dump
+void _trace  () { // 13. trace <name>  ( ... -- ... ) show the calling sequence of give forth colon word
+  int t = V.getTracing();
+  V.setTracing(1); 
+  char* name = V.parseToken();
+  if ( ! *name ) {
+    V.setError(002);
+    PRINTF("\nerror 002 ??? no name after trace ??? ");
+    return;
+  }
+  PRINTF("\ntracing %s ",name);
+  Word* w = V.vocSearch(name);
+  if ( ! w ) {
+    V.setError(003);
+    PRINTF("\nerror 003 ??? %s undefined ??? ", name);
+    return;
+  }
+  w->code();
+  V.setTracing(t);
+}
+const Word W_trace  PROGMEM={(Word*)&W_dump, 0, "primitive", "trace", _trace, 0};
+//////////////////////////////////////////////////////////////////////////
+#define LAST (Word*)&W_trace
 #endif WS03_H
